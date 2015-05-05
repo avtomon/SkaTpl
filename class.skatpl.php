@@ -12,7 +12,7 @@ class SkaTpl
 {
     private $template = false;
 
-    private $labels = ['id', 'title', 'class', 'value', 'src', 'data-val'];
+    private $labels = ['id', 'title', 'class', 'value', 'src', 'data-val', 'type', 'for', 'name', 'prop', 'href'];
 
     private $clone = false;
 
@@ -67,27 +67,35 @@ class SkaTpl
             $this->clone = true;
         }
 
-        $class_str = '';
-        foreach ($classes AS $class)
+        if ($classes)
         {
-            $class_str .= "[^'\"]*?(" . implode('|', $classes) . ")";
+            $len = count($classes) - 1;
+            $classes = implode('|', $classes);
+            $class_str = "([^'\"]*?\s)?($classes)";
+            for ($i = 0; $i < $len; $i++)
+            {
+                $class_str .= "\s+($classes)(\s[^'\"]*?)?";
+            }
+            if ($class_str)
+            {
+                $class_regexp = "(class\s*=\s*['\"]{$class_str}(\s[^'\"]*?)?['\"])";
+            }
         }
-        if ($class_str)
-        {
-            $class_regexp = "(class\s*=\s*['\"]{$class_str}[^'\"]*?['\"])";
-        }
-        if ($id)
-            $id_regexp = "(id\s*=\s*['\"]\s*$id\s*['\"])";
 
-        if ($class_str && !$id)
+        if ($id)
+        {
+            $id_regexp = "(id\s*=\s*['\"]\s*$id\s*['\"])";
+        }
+
+        if (isset($class_regexp) && !$id)
         {
             $total = '.+?' . $class_regexp;
         }
-        elseif ($id && !$class_str)
+        elseif (isset($id_regexp) && !isset($class_regexp))
         {
             $total = '.+?' . $id_regexp;
         }
-        elseif ($id && $class_str)
+        elseif (isset($id_regexp) && isset($class_regexp))
         {
             $total = ".+?($class_regexp|$id_regexp).+?($class_regexp|$id_regexp)";
         }
@@ -119,12 +127,14 @@ class SkaTpl
         return $new_parents;
     }
 
-    private function getParents ($selector)
+    private function getParents ($selector, $parents = false)
     {
-        $parents = [];
         $selector = trim($selector);
         $layers = explode(' ', $selector);
-        $parents[] = $this->template;
+        if (!$parents)
+        {
+            $parents[] = $this->template;
+        }
         foreach ($layers AS $layer)
         {
             $parents = $this->getLayers($layer, $parents);
@@ -153,10 +163,8 @@ class SkaTpl
             }
             else
             {
-                //$index++;
                 $start = $matches1[0][1] + strlen($matches1[0][0]);
                 $end = $matches2[0][1] + strlen($matches2[0][0]) - $start;
-                //$tmp = substr($parent, $start, $end);
                 if (preg_match("/<\s*$tag.*?>/ui", substr($parent, $start, $end), $temp, PREG_OFFSET_CAPTURE))
                 {
                     $index++;
@@ -177,43 +185,92 @@ class SkaTpl
 
     private function insertRecord (array $record, $parent)
     {
-
         foreach ($record AS $key => $value)
         {
-            $parent = preg_replace("/(<[^>]+?class\s*=\s*['\"][^'\"]*?in_text_{$key}[^'\"]*?['\"].*?>)(.*?)(<\/\s*\w+?\s*>)/ui", "$0$value$3", $parent);
-
-            $labels_exp = implode('|', $this->labels);
-            if (preg_match_all("/<[^>]+?class\s*=\s*['\"][^'\"]*?in_($labels_exp)_{$key}[^'\"]*?['\"].*?>/ui", $parent, $match))
+            if (is_array($value))
             {
-                foreach ($this->labels AS $selector)
+                $parents = $this->getParents('.parent.clone.' . $key, [$parent]);
+
+                //$this->insertData($value, $parents);
+
+                $new_parents = $parents;
+                foreach ($parents AS $index => $p)
                 {
-                    if (preg_match_all("/<[^>]+?class\s*=\s*['\"][^'\"]*?in_{$selector}_{$key}[^'\"]*?['\"].*?>/ui", $parent, $strings))
+                    foreach ($value AS $r)
                     {
-                        foreach ($strings[0] AS $str)
+                        $tmp = $this->insertRecord($r, $p);
+                        $new_parents[$index] .= $this->deleteCloneClass($tmp);
+                    }
+                }
+                $parent = str_replace($parents, $new_parents, $parent);
+            }
+            else
+            {
+                $parent = preg_replace("/(<[^>]+?class\s*=\s*['\"][^'\"]*?in_text_{$key}[^'\"]*?['\"].*?>)(.*?)(<\/\s*\w+?\s*>)/ui", "\${1}$value\${3}", $parent);
+
+                $labels_exp = implode('|', $this->labels);
+                if (preg_match_all("/<[^>]+?class\s*=\s*['\"][^'\"]*?in_($labels_exp)_{$key}(\s[^'\"]*)?['\"].*?>/ui", $parent, $match))
+                {
+                    foreach ($this->labels AS $selector)
+                    {
+                        if (preg_match_all("/<[^>]+?class\s*=\s*['\"][^'\"]*?in_{$selector}_{$key}(\s[^'\"]*)?['\"].*?>/ui", $parent, $strings))
                         {
-                            if (preg_match("/$selector\s*=\s*['\"].*?['\"]/iu", $str))
+                            foreach ($strings[0] AS $str)
                             {
-                                if ($selector !== 'class')
+                                if (preg_match("/$selector\s*=\s*['\"].*?['\"]/iu", $str))
                                 {
-                                    $new_str = preg_replace("/$selector\s*=\s*['\"].*?['\"]/iu", "$selector=\"$value\"", $str);
+                                    if ($selector == 'class')
+                                    {
+                                        $new_str = preg_replace("/class\s*=\s*['\"](.*?)['\"]/iu", "class=\"$1 $value\"", $str);
+                                    }
+                                    elseif ($selector == 'href')
+                                    {
+                                        $new_str = preg_replace("/href\s*=\s*['\"](.*?)['\"]/iu", "href=\"\${1}$value\"", $str);
+                                    }
+                                    elseif ($selector == 'prop')
+                                    {
+                                        $new_str = preg_replace("/$selector\s*=\s*['\"].*?['\"]/iu", "$value=\"$value\"", $str);
+                                    }
+                                    elseif ($selector == 'src')
+                                    {
+                                        if ($value)
+                                        {
+                                            $new_str = preg_replace("/$selector\s*=\s*['\"].*?['\"]/iu", "$selector=\"$value\"", $str);
+                                        }
+                                        else
+                                        {
+                                            $new_str = $str;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        $new_str = preg_replace("/$selector\s*=\s*['\"].*?['\"]/iu", "$selector=\"$value\"", $str);
+                                    }
                                 }
                                 else
                                 {
-                                    $new_str = preg_replace("/class\s*=\s*['\"](.*?)['\"]/iu", "class=\"$1 $value\"", $str);
+                                    if ($selector == 'prop')
+                                    {
+                                        $selector = $value;
+                                    }
+                                    if ($selector != 'src' || $value)
+                                    {
+                                        if (preg_match('/(\/>|>)/iu', $str, $m))
+                                        {
+                                            $new_str = preg_replace('/(>|\/>)/', '', $str) . " $selector=\"" . $value . '" ' . $m[0];
+                                        }
+                                        else
+                                        {
+                                            $new_str = $str . " $selector=\"" . $value . '" >';
+                                        }
+                                    }
+                                }
+                                if (isset($new_str))
+                                {
+                                    $parent = str_replace($str, $new_str, $parent);
+                                    unset($new_str);
                                 }
                             }
-                            else
-                            {
-                                if (preg_match('/(\/>|>)/iu', $str, $m))
-                                {
-                                    $new_str = preg_replace('/(>|\/>)/', '', $str) . " $selector=\"" . $value . '" ' . $m[0];
-                                }
-                                else
-                                {
-                                    $new_str = $str . " $selector=\"" . $value . '" >';
-                                }
-                            }
-                            $parent = str_replace($str, $new_str, $parent);
                         }
                     }
                 }
@@ -224,7 +281,7 @@ class SkaTpl
 
     private function deleteCloneClass ($parent)
     {
-        return preg_replace('/([\s\'"])(clone)([\s\'"])/iu', "$1$3", $parent);
+        return preg_replace('/([\s\'"])(clone)([\s\'"])/iu', "$1$3", $parent, 1);
     }
 
     private function insertData (array $data, array $parents)
@@ -235,7 +292,7 @@ class SkaTpl
             $new_parents = [];
             foreach ($parents AS $parent)
             {
-                $new_parents[] = $this->insertRecord($new_data[0], $this->deleteCloneClass($parent));
+                $new_parents[] = $this->insertRecord($new_data[0], $parent);
             }
             $this->template = str_replace($parents, $new_parents, $this->template);
         }
@@ -246,7 +303,7 @@ class SkaTpl
             {
                 foreach ($data AS $record)
                 {
-                    $new_parents[$index] .= $this->insertRecord($record, $parent);
+                    $new_parents[$index] .= $this->deleteCloneClass($this->insertRecord($record, $parent));
                 }
             }
             $this->template = str_replace($parents, $new_parents, $this->template);
@@ -261,5 +318,4 @@ class SkaTpl
 
         return $this->template;
     }
-
 }
