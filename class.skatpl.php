@@ -10,11 +10,11 @@ class SkaTplException extends Exception { }
 
 class SkaTpl
 {
-    private $template = false;
+    private $template = false; // Обрабатываемый шаблон
 
-    private $labels = ['id', 'title', 'class', 'value', 'src', 'data-val', 'type', 'for', 'name', 'prop', 'href'];
+    private $labels = ['id', 'title', 'class', 'value', 'src', 'data-val', 'type', 'for', 'name', 'prop', 'href']; // Массив атрибутов DOM-эелемента возможных для заполнения
 
-    private $clone = false;
+    private $clone = false; // Нужно ли клонировать объект DOM для вставки некольких записей
 
     function __construct ($path = false)
     {
@@ -27,16 +27,34 @@ class SkaTpl
         }
     }
 
+    /**
+     * Установить шаблон для изменения
+     *
+     * @param $code - разметра шаблона
+     */
     public function setTemplate ($code)
     {
         $this->template = $code;
     }
 
+    /**
+     * Вернуть разметку обрабатываемого шаблона
+     *
+     * @return bool|string
+     */
     public function getTemplate ()
     {
         return $this->template;
     }
 
+    /**
+     * Возвращает DOM-элементы для вставки
+     *
+     * @param $selector - селектор для поиска
+     * @param array $parents - родительские элементы для поиска
+     *
+     * @return array
+     */
     private function getLayers ($selector, array $parents)
     {
         $new_parents = [];
@@ -127,6 +145,14 @@ class SkaTpl
         return $new_parents;
     }
 
+    /**
+     * Возвращает все элементы шаблона для вставки
+     *
+     * @param $selector - селектор DOM-объекта
+     * @param bool|false $parents - элементы внутри которых следует искать объекты для вставки данных
+     *
+     * @return array|bool
+     */
     private function getParents ($selector, $parents = false)
     {
         $selector = trim($selector);
@@ -142,6 +168,17 @@ class SkaTpl
         return $parents;
     }
 
+    /**
+     * Вхождение строк с искомого селектора
+     *
+     * @param $startpos - с какой позиции искать
+     * @param array $m - массив совпадений с селектором
+     * @param $tag - тег искомых элементов
+     * @param $index - счетчик вложенности поиска
+     * @param $parent - родительский элемент для поиска
+     *
+     * @return string
+     */
     private function getParent ($startpos, array $m, $tag, &$index, $parent)
     {
         preg_match("/<\s*$tag.*?>/ui", $parent, $matches1, PREG_OFFSET_CAPTURE, $m[1] + strlen($m[0]));
@@ -183,6 +220,14 @@ class SkaTpl
         }
     }
 
+    /**
+     * Вставить запась в элемент страницы
+     *
+     * @param array $record - запись
+     * @param $parent - элемент для вставки
+     *
+     * @return mixed
+     */
     private function insertRecord (array $record, $parent)
     {
         foreach ($record AS $key => $value)
@@ -279,11 +324,24 @@ class SkaTpl
         return $parent;
     }
 
+    /**
+     * Удалить clone-класс из определения DOM-элемента
+     *
+     * @param $parent - DOM-элемент
+     *
+     * @return mixed
+     */
     private function deleteCloneClass ($parent)
     {
         return preg_replace('/([\s\'"])(clone)([\s\'"])/iu', "$1$3", $parent, 1);
     }
 
+    /**
+     * Вставить данные в соответвтвующие элементы страницы
+     *
+     * @param array $data - вставляемые данные
+     * @param array $parents - массив элементов страницы для вставки
+     */
     private function insertData (array $data, array $parents)
     {
         if (!$this->clone)
@@ -310,6 +368,14 @@ class SkaTpl
         }
     }
 
+    /**
+     * Вставить данные в шаблон и вернуть его
+     *
+     * @param array $data - массив данных
+     * @param $selector - селектор элементов для вставки
+     *
+     * @return bool|string
+     */
     public function parseResponse (array $data, $selector)
     {
         $parents = $this->getParents($selector);
