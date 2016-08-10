@@ -12,11 +12,18 @@ class SkaTpl
 {
     private $template = false; // Обрабатываемый шаблон
 
-    private $labels = ['id', 'title', 'class', 'value', 'src', 'data-val', 'type', 'for', 'name', 'prop', 'href']; // Массив атрибутов DOM-эелемента возможных для заполнения
+    const LABELS = ['id', 'title', 'class', 'value', 'src', 'data-val', 'type', 'for', 'name', 'prop', 'href', 'content', 'data-ulogin']; // Массив атрибутов DOM-эелемента возможных для заполнения
 
     private $clone = false; // Нужно ли клонировать объект DOM для вставки некольких записей
 
-    function __construct ($path = false)
+    /**
+     * Конструктор класса
+     *
+     * @param string|null $path - путь к файлу шаблона
+     *
+     * @throws SkaTplException
+     */
+    function __construct (string $path = null)
     {
         if ($path)
         {
@@ -28,13 +35,15 @@ class SkaTpl
     }
 
     /**
-     * Установить шаблон для изменения
+     * * Установить шаблон для изменения
      *
-     * @param $code - разметра шаблона
+     * @param string $code - разметрка шаблона
+     *
+     * @return string
      */
-    public function setTemplate ($code)
+    public function setTemplate (string $code)
     {
-        $this->template = $code;
+        return $this->template = $code;
     }
 
     /**
@@ -55,23 +64,25 @@ class SkaTpl
      *
      * @return array
      */
-    private function getLayers ($selector, array $parents)
+    private function getLayers (string & $selector, array & $parents)
     {
+        $this->clone = false;
         $new_parents = [];
         $classes = explode('.', $selector);
         $id = '';
         if (strpos($selector, '#') !== false)
         {
-            foreach ($classes AS $index => $class)
+            foreach ($classes AS $index => & $class)
             {
                 $class = explode('#', $class);
                 if (isset($class[1]))
                 {
                     $id = $class[1];
-                    $classes[$index] = $class[0];
+                    $class = $class[0];
                     break;
                 }
             }
+            unset($class);
         }
         $tag = '';
         if ($classes[0] !== '')
@@ -124,12 +135,12 @@ class SkaTpl
 
         $regexp = "/<\s*$tag$total.*?>/iu";
 
-        foreach ($parents AS $parent)
+        foreach ($parents as & $parent)
         {
             if (preg_match_all($regexp, $parent, $match, PREG_OFFSET_CAPTURE))
             {
                 $index = 0;
-                foreach ($match[0] AS $m)
+                foreach ($match[0] as & $m)
                 {
                     if (!$tag)
                     {
@@ -140,8 +151,10 @@ class SkaTpl
                     }
                     $new_parents[] = $this->getParent($m[1], $m, $tag, $index, $parent);
                 }
+                unset($m);
             }
         }
+        unset($parent);
         return $new_parents;
     }
 
@@ -149,11 +162,11 @@ class SkaTpl
      * Возвращает все элементы шаблона для вставки
      *
      * @param $selector - селектор DOM-объекта
-     * @param bool|false $parents - элементы внутри которых следует искать объекты для вставки данных
+     * @param array|null $parents - элементы внутри которых следует искать объекты для вставки данных
      *
      * @return array|bool
      */
-    private function getParents ($selector, $parents = false)
+    private function getParents (string $selector, array $parents = null)
     {
         $selector = trim($selector);
         $layers = explode(' ', $selector);
@@ -161,10 +174,11 @@ class SkaTpl
         {
             $parents[] = $this->template;
         }
-        foreach ($layers AS $layer)
+        foreach ($layers as & $layer)
         {
             $parents = $this->getLayers($layer, $parents);
         }
+        unset($layer);
         return $parents;
     }
 
@@ -179,7 +193,7 @@ class SkaTpl
      *
      * @return string
      */
-    private function getParent ($startpos, array $m, $tag, &$index, $parent)
+    private function getParent (int & $startpos, array & $m, string & $tag, int & $index, string & $parent)
     {
         preg_match("/<\s*$tag.*?>/ui", $parent, $matches1, PREG_OFFSET_CAPTURE, $m[1] + strlen($m[0]));
         preg_match("/<\s*\/\s*$tag.*?>/ui", $parent, $matches2, PREG_OFFSET_CAPTURE, $m[1] + strlen($m[0]));
@@ -228,39 +242,28 @@ class SkaTpl
      *
      * @return mixed
      */
-    private function insertRecord (array $record, $parent)
+    private function insertRecord (array & $record, string $parent)
     {
-        foreach ($record AS $key => $value)
+        foreach ($record AS $key => & $value)
         {
             if (is_array($value))
             {
                 $parents = $this->getParents('.parent.clone.' . $key, [$parent]);
-
-                //$this->insertData($value, $parents);
-
-                $new_parents = $parents;
-                foreach ($parents AS $index => $p)
-                {
-                    foreach ($value AS $r)
-                    {
-                        $tmp = $this->insertRecord($r, $p);
-                        $new_parents[$index] .= $this->deleteCloneClass($tmp);
-                    }
-                }
+                $new_parents = $this->insertData($value, $parents);
                 $parent = str_replace($parents, $new_parents, $parent);
             }
             else
             {
                 $parent = preg_replace("/(<[^>]+?class\s*=\s*['\"][^'\"]*?in_text_{$key}[^'\"]*?['\"].*?>)(.*?)(<\/\s*\w+?\s*>)/ui", "\${1}$value\${3}", $parent);
 
-                $labels_exp = implode('|', $this->labels);
+                $labels_exp = implode('|', $this::LABELS);
                 if (preg_match_all("/<[^>]+?class\s*=\s*['\"][^'\"]*?in_($labels_exp)_{$key}(\s[^'\"]*)?['\"].*?>/ui", $parent, $match))
                 {
-                    foreach ($this->labels AS $selector)
+                    foreach ($this::LABELS as $selector)
                     {
                         if (preg_match_all("/<[^>]+?class\s*=\s*['\"][^'\"]*?in_{$selector}_{$key}(\s[^'\"]*)?['\"].*?>/ui", $parent, $strings))
                         {
-                            foreach ($strings[0] AS $str)
+                            foreach ($strings[0] as & $str)
                             {
                                 if (preg_match("/$selector\s*=\s*['\"].*?['\"]/iu", $str))
                                 {
@@ -287,6 +290,11 @@ class SkaTpl
                                             $new_str = $str;
                                         }
                                     }
+                                    elseif ($selector == 'content')
+                                    {
+                                        $value = strip_tags($value);
+                                        $new_str = preg_replace("/content\s*=\s*['\"](.*?)['\"]/iu", "content=\"\${1}$value\"", $str);
+                                    }
                                     else
                                     {
                                         $new_str = preg_replace("/$selector\s*=\s*['\"].*?['\"]/iu", "$selector=\"$value\"", $str);
@@ -297,6 +305,10 @@ class SkaTpl
                                     if ($selector == 'prop')
                                     {
                                         $selector = $value;
+                                    }
+                                    elseif ($selector == 'content')
+                                    {
+                                        $value = strip_tags($value);
                                     }
                                     if ($selector != 'src' || $value)
                                     {
@@ -316,11 +328,14 @@ class SkaTpl
                                     unset($new_str);
                                 }
                             }
+                            unset($str);
                         }
                     }
+                    unset($selector);
                 }
             }
         }
+        unset($value);
         return $parent;
     }
 
@@ -331,9 +346,9 @@ class SkaTpl
      *
      * @return mixed
      */
-    private function deleteCloneClass ($parent)
+    private function deleteCloneClass (string $parent)
     {
-        return preg_replace('/([\s\'"])(clone)([\s\'"])/iu', "$1$3", $parent, 1);
+        return $parent = preg_replace('/([\s\'"])(clone)([\s\'"])/iu', "$1$3", $parent, 1);
     }
 
     /**
@@ -341,31 +356,36 @@ class SkaTpl
      *
      * @param array $data - вставляемые данные
      * @param array $parents - массив элементов страницы для вставки
+     *
+     * @return array
      */
-    private function insertData (array $data, array $parents)
+    private function insertData (array & $data, array & $parents)
     {
         if (!$this->clone)
         {
-            $new_data[] = $data[0];
+            $new_data[] = isset($data[0]) ? $data[0] : $data;
             $new_parents = [];
-            foreach ($parents AS $parent)
+            foreach ($parents as & $parent)
             {
                 $new_parents[] = $this->insertRecord($new_data[0], $parent);
             }
-            $this->template = str_replace($parents, $new_parents, $this->template);
+            unset($parent);
         }
         else
         {
             $new_parents = $parents;
-            foreach ($parents AS $index => $parent)
+            foreach ($parents as $index => & $parent)
             {
-                foreach ($data AS $record)
+                foreach ($data as & $record)
                 {
-                    $new_parents[$index] .= $this->deleteCloneClass($this->insertRecord($record, $parent));
+                    if (is_array($record))
+                        $new_parents[$index] .= $this->deleteCloneClass($this->insertRecord($record, $parent));
                 }
+                unset($record);
             }
-            $this->template = str_replace($parents, $new_parents, $this->template);
+            unset($parent);
         }
+        return $new_parents;
     }
 
     /**
@@ -376,11 +396,12 @@ class SkaTpl
      *
      * @return bool|string
      */
-    public function parseResponse (array $data, $selector)
+    public function parseResponse (array & $data, string & $selector)
     {
         $parents = $this->getParents($selector);
+        $new_parents = $this->insertData($data, $parents);
 
-        $this->insertData($data, $parents);
+        $this->template = str_replace($parents, $new_parents, $this->template);
 
         return $this->template;
     }
