@@ -61,6 +61,19 @@ SkaTpl - класс-шаблонизатор для PHP. Проще говоря
 <br>
 ##Описание методов
 
+####__construct
+
+    function __construct (string $path = null)
+    
+**Описание:**
+
+Конструктор класса.
+
+**Параметры:**
+
+-   *$path* – путь к файлу шаблона.
+
+<br>
 ####setTemplate
 
     public function setTemplate (string $code)
