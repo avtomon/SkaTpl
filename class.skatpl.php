@@ -248,7 +248,7 @@ class SkaTpl
         {
             if (is_array($value))
             {
-                $parents = $this->getParents('.parent.clone.' . $key, [$parent]);
+                $parents = $this->getParents('.clone.' . $key, [$parent]);
                 $new_parents = $this->insertData($value, $parents);
                 $parent = str_replace($parents, $new_parents, $parent);
             }
