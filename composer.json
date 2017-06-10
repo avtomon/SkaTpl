@@ -1,6 +1,6 @@
 {
-    "name": "avtomon/_PDO",
-    "description": "Yet another PHP PDO wrapper",
+    "name": "avtomon/SkaTpl",
+    "description": "Yet another PHP templater",
     "type": "project",
     "minimum-stability": "dev",
     "config": {
